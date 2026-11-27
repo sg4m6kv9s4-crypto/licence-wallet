@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>My Licence Wallet</title>
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, sans-serif;
+    background: #f2f4f7;
+    color: #111;
+  }
+  .screen {
+    min-height: 100vh;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  .hidden { display: none; }
+  h1 { text-align: center; font-size: 22px; }
+  .card {
+    background: white;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,.15);
+    margin-bottom: 16px;
+  }
+  .header {
+    padding: 14px;
+    color: white;
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(120deg, #00507d, #007a63);
+  }
+  .badge {
+    background: #ffd60a;
+    color: black;
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 999px;
+  }
+  .details {
+    display: flex;
+    gap: 14px;
+    padding: 16px;
+  }
+  img {
+    width: 92px;
+    height: 118px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+  }
+  .fields { font-size: 13px; line-height: 1.5; }
+  .footer {
+    padding: 14px;
+    background: #eef1f4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+  }
+  .qr {
+    width: 64px;
+    height: 64px;
+    background: black;
+    color: white;
+    display: grid;
+    place-items: center;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 6px;
+    text-align: center;
+  }
+  input, button {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    margin-bottom: 10px;
+    border-radius: 12px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+  }
+  button {
+    background: #00507d;
+    color: white;
+    border: none;
+    font-weight: 600;
+  }
+  .warning {
+    color: #b25000;
+    font-weight: 700;
+    text-align: center;
+    font-size: 12px;
+    margin-top: 10px;
+  }
+  .full {
+    position: fixed;
+    inset: 0;
+    background: black;
+    display: grid;
+    place-items: center;
+    z-index: 10;
+  }
+  .full img {
+    width: 95%;
+    height: auto;
+    max-height: 80vh;
+  }
+</style>
+</head>
+<body>
+
+<div id="lockScreen" class="screen">
+  <h1>🔒 My Licence Wallet</h1>
+  <input id="pin" type="password" inputmode="numeric" placeholder="Enter 4-digit PIN">
+  <button onclick="unlock()">Unlock</button>
+  <p id="lockError" style="color:red;text-align:center;font-size:13px;"></p>
+</div>
+
+<div id="appScreen" class="screen hidden">
+  <h1>My Licence Wallet</h1>
+
+  <div id="emptyState">
+    <p style="text-align:center;">Add your licence photo and details.</p>
+    <input type="file" accept="image/*" id="photoInput">
+    <input id="fullName" placeholder="Full name">
+    <input id="dob" placeholder="Date of birth">
+    <input id="licenceNumber" placeholder="Licence number">
+    <input id="licenceClass" placeholder="Licence class">
+    <input id="expiry" placeholder="Expiry date">
+    <input id="pinSetup" type="password" inputmode="numeric" placeholder="Set a 4-digit PIN">
+    <button onclick="saveLicence()">Save licence</button>
+  </div>
+
+  <div id="licenceDisplay" class="hidden">
+    <div class="card" onclick="showFull()">
+      <div class="header">
+        <span>QUEENSLAND DRIVER LICENCE</span>
+        <span class="badge">PERSONAL COPY</span>
+      </div>
+
+      <div class="details">
+        <img id="cardPhoto" alt="Licence photo">
+        <div class="fields">
+          <strong id="cardName"></strong><br>
+          Date of birth:<br><span id="cardDob"></span><br>
+          Licence no.:<br><span id="cardNumber"></span><br>
+          Class <span id="cardClass"></span> • Expires <span id="cardExpiry"></span>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="qr">QR<br>NOT VALID</div>
+        <div style="text-align:right;">
+          Personal wallet<br>
+          <strong style="color:red;">Not government issued</strong>
+        </div>
+      </div>
+    </div>
+
+    <button onclick="editLicence()">Edit details</button>
+    <button onclick="deleteLicence()" style="background:#c0392b;">Delete licence</button>
+
+    <p class="warning">
+      This is a personal copy and is not an official Queensland digital licence.
+    </p>
+  </div>
+</div>
+
+<div id="fullScreen" class="full hidden">
+  <img id="fullPhoto" alt="Full licence">
+  <button onclick="hideFull()" style="width:auto;padding:12px 24px;">Hide</button>
+</div>
+
+<script>
+const KEY = "myPersonalLicence";
+const PIN_KEY = "myLicencePin";
+let attempts = 0;
+
+function getLicence() {
+  return JSON.parse(localStorage.getItem(KEY) || "null");
+}
+
+function unlock() {
+  const entered = document.getElementById("pin").value;
+  const savedPin = localStorage.getItem(PIN_KEY);
+
+  if (!savedPin) {
+    document.getElementById("lockError").textContent =
+      "No PIN set yet. Add your licence first.";
+    return;
+  }
+
+  if (entered === savedPin) {
+    document.getElementById("lockScreen").classList.add("hidden");
+    document.getElementById("appScreen").classList.remove("hidden");
+    showLicence();
+  } else {
+    attempts++;
+    document.getElementById("lockError").textContent =
+      "Incorrect PIN. Attempt " + attempts + ".";
+  }
+}
+
+function saveLicence() {
+  const file = document.getElementById("photoInput").files[0];
+  const pin = document.getElementById("pinSetup").value;
+
+  if (!file) {
+    alert("Choose a licence photo first.");
+    return;
+  }
+
+  if (pin.length !== 4) {
+    alert("Set a 4-digit PIN.");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = function(event) {
+    const licence = {
+      photo: event.target.result,
+      fullName: document.getElementById("fullName").value,
+      dob: document.getElementById("dob").value,
+      number: document.getElementById("licenceNumber").value,
+      licenceClass: document.getElementById("licenceClass").value,
+      expiry: document.getElementById("expiry").value
+    };
+
+    localStorage.setItem(KEY, JSON.stringify(licence));
+    localStorage.setItem(PIN_KEY, pin);
+
+    document.getElementById("emptyState").classList.add("hidden");
+    document.getElementById("licenceDisplay").classList.remove("hidden");
+    showLicence();
+  };
+
+  reader.readAsDataURL(file);
+}
+
+function showLicence() {
+  const licence = getLicence();
+  if (!licence) return;
+
+  document.getElementById("emptyState").classList.add("hidden");
+  document.getElementById("licenceDisplay").classList.remove("hidden");
+
+  document.getElementById("cardPhoto").src = licence.photo;
+  document.getElementById("cardName").textContent = licence.fullName;
+  document.getElementById("cardDob").textContent = licence.dob;
+  document.getElementById("cardNumber").textContent = licence.number;
+  document.getElementById("cardClass").textContent = licence.licenceClass;
+  document.getElementById("cardExpiry").textContent = licence.expiry;
+}
+
+function editLicence() {
+  const licence = getLicence();
+  if (!licence) return;
+
+  document.getElementById("licenceDisplay").classList.add("hidden");
+  document.getElementById("emptyState").classList.remove("hidden");
+
+  document.getElementById("fullName").value = licence.fullName;
+  document.getElementById("dob").value = licence.dob;
+  document.getElementById("licenceNumber").value = licence.number;
+  document.getElementById("licenceClass").value = licence.licenceClass;
+  document.getElementById("expiry").value = licence.expiry;
+}
+
+function deleteLicence() {
+  if (confirm("Delete your saved licence?")) {
+    localStorage.removeItem(KEY);
+    location.reload();
+  }
+}
+
+function showFull() {
+  const licence = getLicence();
+  document.getElementById("fullPhoto").src = licence.photo;
+  document.getElementById("fullScreen").classList.remove("hidden");
+}
+
+function hideFull() {
+  document.getElementById("fullScreen").classList.add("hidden");
+}
+</script>
+
+</body>
+</html>
